@@ -13,10 +13,17 @@ package map, rule authoring, the sandbox model — see
 ```bash
 git clone https://github.com/gadievron/raptor.git
 cd raptor
-pip install -r requirements.txt
-pip install -r requirements-dev.txt   # ruff, mypy
-pip install semgrep                    # required for /scan
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements-dev.txt -r requirements-grammars.txt
+uv pip install semgrep                 # required for /scan
 ```
+
+`requirements-dev.txt` includes the core runtime dependencies and the
+development tools.  The separate grammar requirements enable RAPTOR's
+span-accurate Tree-sitter analysis and keep grammar-dependent tests from
+being skipped.  Install both files into the same `.venv`; `uv venv` only
+creates the environment and does not install either requirements file.
 
 Run the test suite:
 

@@ -66,6 +66,10 @@ For the analysis dispatch layer (the LLM that analyses individual findings), Cla
 
 ## Quick Start
 
+Contributors should use the complete, pinned uv bootstrap in
+[CONTRIBUTING.md](CONTRIBUTING.md#getting-started). It installs the development
+dependencies and Tree-sitter grammars into the repository's `.venv`.
+
 ### Option 1: Install manually
 
 ```bash
