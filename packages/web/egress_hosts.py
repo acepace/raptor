@@ -34,4 +34,10 @@ def target_host(url: str) -> str:
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("target must be an HTTP(S) URL with a host")
-    return parsed.hostname.lower()
+    host = parsed.hostname.lower()
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        if len(host) > 253 or any(not _LABEL.fullmatch(label) for label in host.split(".")):
+            raise ValueError("target host must be an exact DNS name or IP address") from None
+    return host

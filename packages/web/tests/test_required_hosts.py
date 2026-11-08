@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from packages.web.browser import BrowserEngine
-from packages.web.egress_hosts import required_host
+from packages.web.egress_hosts import required_host, target_host
 from packages.web.scanner import WebScanner, build_arg_parser
 
 
@@ -27,6 +27,12 @@ def test_cli_accepts_repeatable_required_hosts():
         "--required-host", "assets.example.net",
     ])
     assert args.required_host == ["login.example.net", "assets.example.net"]
+
+
+def test_target_host_never_adds_proxy_wildcard():
+    with pytest.raises(ValueError):
+        target_host("https://*.example.net")
+    assert target_host("https://127.0.0.1:8443/") == "127.0.0.1"
 
 
 def test_scanner_registers_target_and_required_hosts_before_client(tmp_path):
