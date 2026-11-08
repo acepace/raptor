@@ -110,6 +110,7 @@ class BrowserEngine:
         screenshots_dir: Any = None,
         cookies: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
+        target_headers: dict[str, str] | None = None,
         required_hosts: tuple[str, ...] | list[str] = (),
         allow_unsandboxed_chromium: bool = False,
     ) -> None:
@@ -121,6 +122,7 @@ class BrowserEngine:
         self._screenshots_dir = screenshots_dir
         self._cookies = dict(cookies or {})
         self._extra_headers = dict(extra_headers or {})
+        self._target_headers = dict(target_headers or {})
         from packages.web.egress_hosts import required_host
         self._required_hosts = frozenset(required_host(host) for host in required_hosts)
         # playwright objects typed Any: the dependency is optional and
@@ -249,7 +251,8 @@ class BrowserEngine:
     _RESOURCE_TYPES = frozenset({"script", "stylesheet", "image", "font", "media"})
     _PRIVATE_HEADERS = frozenset({
         "authorization", "cookie", "proxy-authorization", "x-api-key",
-        "x-auth-token", "x-csrf-token", "x-xsrf-token", "host", "content-length",
+        "x-auth-token", "x-csrf-token", "x-xsrf-token", "x-origin-verify",
+        "host", "content-length",
     })
 
     def _allowed_request(self, url: str, *, method: str, resource_type: str) -> bool:
@@ -267,7 +270,10 @@ class BrowserEngine:
         excluded = {"host", "content-length"}
         if not self._same_origin(url):
             excluded |= self._PRIVATE_HEADERS
-        return {name: value for name, value in headers.items() if name.lower() not in excluded}
+        selected = {name: value for name, value in headers.items() if name.lower() not in excluded}
+        if self._same_origin(url):
+            selected.update(self._target_headers)
+        return selected
 
     def _route_gate(self, route: Any) -> None:
         """Origin-gate every request INCLUDING redirect hops.
@@ -292,7 +298,11 @@ class BrowserEngine:
             return
         try:
             if self._same_origin(route.request.url):
-                response = route.fetch(max_redirects=0)
+                if self._target_headers:
+                    initial_headers = self._request_headers(route.request.headers, route.request.url)
+                    response = route.fetch(max_redirects=0, headers=initial_headers)
+                else:
+                    response = route.fetch(max_redirects=0)
             else:
                 initial_headers = self._request_headers(route.request.headers, route.request.url)
                 response = route.fetch(max_redirects=0, headers=initial_headers)

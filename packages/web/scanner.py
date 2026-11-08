@@ -182,6 +182,7 @@ class WebScanner:
         oob_grace: float = 10.0,
         browser: bool = False,
         required_hosts: list[str] | None = None,
+        origin_verify: str | None = None,
         allow_unsandboxed_chromium: bool = False,
         report_options=None,
     ) -> None:
@@ -218,6 +219,8 @@ class WebScanner:
         from packages.web.egress_hosts import required_host, target_host
         self.required_hosts = tuple(dict.fromkeys(required_host(host) for host in (required_hosts or [])))
         web_target_host = target_host(self.base_url)
+        from packages.web.origin_verify import validate_value
+        self.origin_verify = validate_value(origin_verify) if origin_verify is not None else None
         self.allow_unsandboxed_chromium = allow_unsandboxed_chromium
         self._browser_coverage_gaps: list[str] = []
         self.oob_grace = oob_grace
@@ -260,6 +263,9 @@ class WebScanner:
         # policy as "origin checks only".
         self.client.execution_policy = self.execution_policy
         self.client.rate_limit = rate_limit
+        if self.origin_verify is not None:
+            from packages.web.origin_verify import HEADER_NAME
+            self.client.session.headers[HEADER_NAME] = self.origin_verify
         self.crawler = WebCrawler(self.client, max_depth=max_depth, max_pages=max_pages)
         # The fuzzer is always constructed: without an LLM it fuzzes with
         # static payloads, and the three-gate oracle keeps the false
@@ -1005,6 +1011,9 @@ class WebScanner:
         )
         client.execution_policy = self.execution_policy
         client.rate_limit = self._client_rate_limit
+        if self.origin_verify is not None:
+            from packages.web.origin_verify import HEADER_NAME
+            client.session.headers[HEADER_NAME] = self.origin_verify
         return client
 
     def _phase_access_control(
@@ -1758,6 +1767,10 @@ class WebScanner:
 
         cookies: dict[str, str] = {}
         headers: dict[str, str] = {}
+        target_headers: dict[str, str] = {}
+        if self.origin_verify is not None:
+            from packages.web.origin_verify import HEADER_NAME
+            target_headers[HEADER_NAME] = self.origin_verify
         if self.session and self.session.authenticated:
             if self.session.mode == "bearer" and self.session.token:
                 headers["Authorization"] = f"Bearer {self.session.token}"
@@ -1770,6 +1783,7 @@ class WebScanner:
             required_hosts=self.required_hosts,
             cookies=cookies,
             extra_headers=headers,
+            target_headers=target_headers,
             screenshots_dir=screenshots,
             allow_unsandboxed_chromium=self.allow_unsandboxed_chromium,
         )
@@ -3183,9 +3197,16 @@ Examples:
 
     parser.add_argument("--url", required=True, help="Target web application URL")
     parser.add_argument(
-        "--required-host", action="append", default=[], metavar="HOST",
+        "--required-host", action="append",
+        default=[host for host in os.environ.get("RAPTOR_WEB_REQUIRED_HOSTS", "").split(",") if host],
+        metavar="HOST",
         help="Additional exact DNS host needed for login or page assets; repeatable. "
              "Does not expand scan scope.",
+    )
+    parser.add_argument(
+        "--origin-verify-file", default=os.environ.get("RAPTOR_ORIGIN_VERIFY_FILE"),
+        metavar="FILE",
+        help="Owner-only file containing the X-Origin-Verify value for target-origin requests",
     )
     parser.add_argument("--out", help="Output directory for results")
     parser.add_argument(
@@ -3681,6 +3702,13 @@ def main():
         args.required_host = list(dict.fromkeys(required_host(host) for host in args.required_host))
     except ValueError as exc:
         parser.error(str(exc))
+    origin_verify = None
+    if args.origin_verify_file:
+        from packages.web.origin_verify import read_value
+        try:
+            origin_verify = read_value(args.origin_verify_file)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.allow_unsandboxed_chromium and not args.browser:
         parser.error("--allow-unsandboxed-chromium requires --browser")
     from core.reporting.options import options_from_args
@@ -3834,6 +3862,7 @@ def main():
         oob_grace=args.oob_grace,
         browser=bool(args.browser),
         required_hosts=args.required_host,
+        origin_verify=origin_verify,
         allow_unsandboxed_chromium=bool(args.allow_unsandboxed_chromium),
         report_options=report_options,
     )

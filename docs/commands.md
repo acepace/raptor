@@ -371,7 +371,8 @@ Web application security scanner (alpha).
 | Flag | Description |
 |------|-------------|
 | `--url <url>` | Target URL (required) |
-| `--required-host <host>` | Exact additional DNS host for login transport or browser assets (repeatable; does not expand scan scope) |
+| `--required-host <host>` | Exact additional DNS host for login transport or browser assets (repeatable; `RAPTOR_WEB_REQUIRED_HOSTS` can supply a comma-separated list; does not expand scan scope) |
+| `--origin-verify-file <file>` | Owner-only file containing the target-origin `X-Origin-Verify` value (also accepts `RAPTOR_ORIGIN_VERIFY_FILE`) |
 | `--out <dir>` | Output directory override |
 | `--max-depth <n>` | Maximum crawl depth (default 3) |
 | `--max-pages <n>` | Maximum pages to crawl (default 100) |

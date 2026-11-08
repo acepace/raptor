@@ -15,6 +15,10 @@ python3 raptor.py web --url https://target.example.com
 python3 raptor.py web --url https://target.example.com --browser \
   --required-host login.example.net --required-host assets.example.net
 
+# Send a private origin-admission header only to the target origin.
+python3 raptor.py web --url https://target.example.com \
+  --origin-verify-file /private/path/origin-verify.secret
+
 # Bounded smoke test against a lab target
 python3 raptor.py web --url https://target.example.com --no-llm \
   --max-depth 1 --max-pages 10 \
@@ -66,8 +70,16 @@ is refused before the request or external tool runs.
 a scheme, port, or wildcard. It registers those hosts with the process egress
 proxy and permits browser asset requests (scripts, styles, images, fonts, and
 media) to them. It does not authorize crawling or testing other origins.
+`RAPTOR_WEB_REQUIRED_HOSTS` can supply a comma-separated list for a particular
+run; command-line `--required-host` values add to that list.
 Cross-origin interactive login still requires a separately established session
 provided through the documented cookie or bearer authentication modes.
+
+`--origin-verify-file FILE` reads the value for `X-Origin-Verify` from an
+owner-only regular file (mode 0600). The value stays out of command arguments
+and is sent only to the target origin, including browser requests and
+same-origin redirects. It is never sent to `--required-host` domains. Set
+`RAPTOR_ORIGIN_VERIFY_FILE` to use the same file without repeating the option.
 
 `passive` still allows same-origin discovery, crawling and passive checks, but
 skips the injection/fuzzing phase and blocks external active tools such as
