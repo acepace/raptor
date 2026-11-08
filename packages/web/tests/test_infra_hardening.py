@@ -355,6 +355,7 @@ def test_redirect_hop_abort_records_the_blocked_host():
         class request:  # noqa: N801 - playwright shape
             url = "https://target.example/start"
             method = "GET"
+            resource_type = "document"
             post_data = None
             headers: dict = {}
 

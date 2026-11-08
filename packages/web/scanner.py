@@ -181,6 +181,7 @@ class WebScanner:
         oob_callback_host: str | None = None,
         oob_grace: float = 10.0,
         browser: bool = False,
+        required_hosts: list[str] | None = None,
         allow_unsandboxed_chromium: bool = False,
         report_options=None,
     ) -> None:
@@ -214,6 +215,9 @@ class WebScanner:
         self.ffuf_wordlist_dir = ffuf_wordlist_dir
         self.ffuf_api_wordlist = ffuf_api_wordlist
         self.use_browser = browser
+        from packages.web.egress_hosts import required_host, target_host
+        self.required_hosts = tuple(dict.fromkeys(required_host(host) for host in (required_hosts or [])))
+        web_target_host = target_host(self.base_url)
         self.allow_unsandboxed_chromium = allow_unsandboxed_chromium
         self._browser_coverage_gaps: list[str] = []
         self.oob_grace = oob_grace
@@ -238,6 +242,14 @@ class WebScanner:
             approval_level=approval_level,
             approved_tools=approved_tools or [],
         )
+
+        # LLM initialization installs a process-wide HTTP(S) proxy. Register
+        # web transport hosts before the first preflight request. This does
+        # not change the scanner's exact-origin execution policy.
+        from core.llm import egress as llm_egress
+        if llm_egress._enabled:
+            from core.sandbox.proxy import get_proxy
+            get_proxy([web_target_host, *self.required_hosts])
 
         self.client = WebClient(
             base_url, verify_ssl=verify_ssl, reveal_secrets=reveal_secrets,
@@ -1755,6 +1767,7 @@ class WebScanner:
         screenshots.mkdir(exist_ok=True)
         return BrowserEngine(
             self.base_url,
+            required_hosts=self.required_hosts,
             cookies=cookies,
             extra_headers=headers,
             screenshots_dir=screenshots,
@@ -3169,6 +3182,11 @@ Examples:
     )
 
     parser.add_argument("--url", required=True, help="Target web application URL")
+    parser.add_argument(
+        "--required-host", action="append", default=[], metavar="HOST",
+        help="Additional exact DNS host needed for login or page assets; repeatable. "
+             "Does not expand scan scope.",
+    )
     parser.add_argument("--out", help="Output directory for results")
     parser.add_argument(
         "--project", default=None, metavar="NAME",
@@ -3658,6 +3676,11 @@ def main():
 
     parser = build_arg_parser()
     args = parser.parse_args()
+    from packages.web.egress_hosts import required_host
+    try:
+        args.required_host = list(dict.fromkeys(required_host(host) for host in args.required_host))
+    except ValueError as exc:
+        parser.error(str(exc))
     if args.allow_unsandboxed_chromium and not args.browser:
         parser.error("--allow-unsandboxed-chromium requires --browser")
     from core.reporting.options import options_from_args
@@ -3810,6 +3833,7 @@ def main():
         oob_callback_host=args.oob_callback_host,
         oob_grace=args.oob_grace,
         browser=bool(args.browser),
+        required_hosts=args.required_host,
         allow_unsandboxed_chromium=bool(args.allow_unsandboxed_chromium),
         report_options=report_options,
     )

@@ -110,6 +110,7 @@ class BrowserEngine:
         screenshots_dir: Any = None,
         cookies: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
+        required_hosts: tuple[str, ...] | list[str] = (),
         allow_unsandboxed_chromium: bool = False,
     ) -> None:
         self._launch_kwargs = _launch_options(allow_unsandboxed_chromium=allow_unsandboxed_chromium)
@@ -120,6 +121,8 @@ class BrowserEngine:
         self._screenshots_dir = screenshots_dir
         self._cookies = dict(cookies or {})
         self._extra_headers = dict(extra_headers or {})
+        from packages.web.egress_hosts import required_host
+        self._required_hosts = frozenset(required_host(host) for host in required_hosts)
         # playwright objects typed Any: the dependency is optional and
         # import-guarded, so its types can't appear in annotations.
         self._pw: Any = None
@@ -243,6 +246,29 @@ class BrowserEngine:
 
     _MAX_REDIRECT_HOPS = 5
 
+    _RESOURCE_TYPES = frozenset({"script", "stylesheet", "image", "font", "media"})
+    _PRIVATE_HEADERS = frozenset({
+        "authorization", "cookie", "proxy-authorization", "x-api-key",
+        "x-auth-token", "x-csrf-token", "x-xsrf-token", "host", "content-length",
+    })
+
+    def _allowed_request(self, url: str, *, method: str, resource_type: str) -> bool:
+        if self._same_origin(url):
+            return True
+        parsed = urlsplit(url)
+        return (
+            parsed.scheme in ("http", "https")
+            and parsed.hostname in self._required_hosts
+            and method in ("GET", "HEAD")
+            and resource_type in self._RESOURCE_TYPES
+        )
+
+    def _request_headers(self, headers: dict[str, str], url: str) -> dict[str, str]:
+        excluded = {"host", "content-length"}
+        if not self._same_origin(url):
+            excluded |= self._PRIVATE_HEADERS
+        return {name: value for name, value in headers.items() if name.lower() not in excluded}
+
     def _route_gate(self, route: Any) -> None:
         """Origin-gate every request INCLUDING redirect hops.
 
@@ -257,13 +283,19 @@ class BrowserEngine:
         """
         from urllib.parse import urljoin
 
-        if not self._same_origin(route.request.url):
+        method = route.request.method
+        resource_type = getattr(route.request, "resource_type", "document")
+        if not self._allowed_request(route.request.url, method=method, resource_type=resource_type):
             self._blocked_requests += 1
             self._note_blocked(route.request.url)
             route.abort()
             return
         try:
-            response = route.fetch(max_redirects=0)
+            if self._same_origin(route.request.url):
+                response = route.fetch(max_redirects=0)
+            else:
+                initial_headers = self._request_headers(route.request.headers, route.request.url)
+                response = route.fetch(max_redirects=0, headers=initial_headers)
             current_url = route.request.url
             hops = 0
             while 300 <= response.status < 400:
@@ -272,8 +304,9 @@ class BrowserEngine:
                     break
                 target = urljoin(current_url, location)
                 hops += 1
-                if hops > self._MAX_REDIRECT_HOPS or not self._same_origin(
-                    target,
+                hop_method = method if response.status in (307, 308) else "GET"
+                if hops > self._MAX_REDIRECT_HOPS or not self._allowed_request(
+                    target, method=hop_method, resource_type=resource_type,
                 ):
                     self._blocked_requests += 1
                     # Record the blocked hop destination too: without
@@ -283,13 +316,7 @@ class BrowserEngine:
                     self._note_blocked(target)
                     route.abort()
                     return
-                hop_headers = {
-                    name: value
-                    for name, value in route.request.headers.items()
-                    # fetch recomputes framing; the host belongs to
-                    # the hop target.
-                    if name.lower() not in ("content-length", "host")
-                }
+                hop_headers = self._request_headers(route.request.headers, target)
                 if response.status in (307, 308):
                     # Method/body-preserving redirects: replay the
                     # original request shape (headers included — the

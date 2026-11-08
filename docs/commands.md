@@ -371,6 +371,7 @@ Web application security scanner (alpha).
 | Flag | Description |
 |------|-------------|
 | `--url <url>` | Target URL (required) |
+| `--required-host <host>` | Exact additional DNS host for login transport or browser assets (repeatable; does not expand scan scope) |
 | `--out <dir>` | Output directory override |
 | `--max-depth <n>` | Maximum crawl depth (default 3) |
 | `--max-pages <n>` | Maximum pages to crawl (default 100) |

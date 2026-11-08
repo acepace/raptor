@@ -10,6 +10,11 @@ A web application security scanner built into RAPTOR. It does two things: runs r
 # Unauthenticated scan
 python3 raptor.py web --url https://target.example.com
 
+# Permit explicitly required login and asset hosts through the egress proxy.
+# The target host is included automatically; only target-origin pages are scanned.
+python3 raptor.py web --url https://target.example.com --browser \
+  --required-host login.example.net --required-host assets.example.net
+
 # Bounded smoke test against a lab target
 python3 raptor.py web --url https://target.example.com --no-llm \
   --max-depth 1 --max-pages 10 \
@@ -56,6 +61,13 @@ allowed to touch, the highest approved action level (`passive`, `active`, or
 `intrusive`), and any individually approved tools. The default is `active`,
 which preserves the current bounded scanner flow. Anything outside that origin
 is refused before the request or external tool runs.
+
+`--required-host HOST` is repeatable and accepts exact public DNS names, without
+a scheme, port, or wildcard. It registers those hosts with the process egress
+proxy and permits browser asset requests (scripts, styles, images, fonts, and
+media) to them. It does not authorize crawling or testing other origins.
+Cross-origin interactive login still requires a separately established session
+provided through the documented cookie or bearer authentication modes.
 
 `passive` still allows same-origin discovery, crawling and passive checks, but
 skips the injection/fuzzing phase and blocks external active tools such as
