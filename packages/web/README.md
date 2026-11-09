@@ -13,6 +13,17 @@ These hosts are admitted to the transport proxy and do not expand the scanner's
 or browser's origin scope. A host applies to HTTP and HTTPS on any port; the
 underlying transport still determines which protocols it can carry.
 
+Use repeatable `--asset-host HOST` or comma-separated
+`RAPTOR_WEB_ASSET_HOSTS` when the browser must load scripts, stylesheets,
+images, or fonts from another exact public DNS host. Asset grants accept HTTP
+or HTTPS on any port. They never allow navigation, forms, XHR, or scan probes
+to leave the target origin. Assets are fetched without target credentials or
+cookies. Asset redirects are refused. Responses are limited to 8 MiB, with
+256 requests and 64 MiB total per browser engine, and
+cannot set target browser cookies. The isolated loader uses the active Raptor
+proxy for both HTTP and HTTPS. It has no direct fallback and does not import
+`.netrc`, ambient proxy settings, or browser state.
+
 For a lab requiring `X-Origin-Verify`, put the 64-character value in an
 owner-only file (mode `0600`) and pass `--origin-verify-file FILE`, or set
 `RAPTOR_ORIGIN_VERIFY_FILE`. The value is sent on target requests only.

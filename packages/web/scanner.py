@@ -182,6 +182,7 @@ class WebScanner:
         oob_grace: float = 10.0,
         browser: bool = False,
         required_hosts: list[str] | None = None,
+        asset_hosts: list[str] | None = None,
         origin_verify: str | None = None,
         allow_unsandboxed_chromium: bool = False,
         report_options=None,
@@ -218,6 +219,7 @@ class WebScanner:
         self.use_browser = browser
         from packages.web.egress_hosts import required_host
         self.required_hosts = tuple(dict.fromkeys(required_host(host) for host in (required_hosts or [])))
+        self.asset_hosts = tuple(dict.fromkeys(required_host(host) for host in (asset_hosts or [])))
         from packages.web.origin_verify import validate_value
         self.origin_verify = validate_value(origin_verify) if origin_verify is not None else None
         self.allow_unsandboxed_chromium = allow_unsandboxed_chromium
@@ -1787,6 +1789,7 @@ class WebScanner:
             self.base_url,
             cookies=cookies,
             extra_headers=headers,
+            asset_hosts=self.asset_hosts,
             screenshots_dir=screenshots,
             allow_unsandboxed_chromium=self.allow_unsandboxed_chromium,
         )
@@ -3215,6 +3218,12 @@ Examples:
         help="Additional exact DNS host for login transport; repeatable. Does not expand scan scope.",
     )
     parser.add_argument(
+        "--asset-host", action="append",
+        default=[host.strip() for host in os.environ.get("RAPTOR_WEB_ASSET_HOSTS", "").split(",") if host.strip()],
+        metavar="HOST",
+        help="Exact DNS host allowed to serve browser page assets; repeatable. Does not expand scan scope.",
+    )
+    parser.add_argument(
         "--origin-verify-file", default=os.environ.get("RAPTOR_ORIGIN_VERIFY_FILE"),
         metavar="FILE", help="Owner-only file containing the target X-Origin-Verify value",
     )
@@ -3867,6 +3876,7 @@ def main():
         oob_grace=args.oob_grace,
         browser=bool(args.browser),
         required_hosts=args.required_host,
+        asset_hosts=args.asset_host,
         origin_verify=origin_verify,
         allow_unsandboxed_chromium=bool(args.allow_unsandboxed_chromium),
         report_options=report_options,

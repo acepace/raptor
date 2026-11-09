@@ -110,6 +110,7 @@ class BrowserEngine:
         screenshots_dir: Any = None,
         cookies: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
+        asset_hosts: tuple[str, ...] | list[str] = (),
         allow_unsandboxed_chromium: bool = False,
     ) -> None:
         self._launch_kwargs = _launch_options(allow_unsandboxed_chromium=allow_unsandboxed_chromium)
@@ -120,6 +121,8 @@ class BrowserEngine:
         self._screenshots_dir = screenshots_dir
         self._cookies = dict(cookies or {})
         self._extra_headers = dict(extra_headers or {})
+        from packages.web.asset_loader import AssetLoader
+        self._asset_loader = AssetLoader(asset_hosts)
         # playwright objects typed Any: the dependency is optional and
         # import-guarded, so its types can't appear in annotations.
         self._pw: Any = None
@@ -243,6 +246,13 @@ class BrowserEngine:
 
     _MAX_REDIRECT_HOPS = 5
 
+    def _allowed_asset(self, url: str, method: str, resource_type: str) -> bool:
+        return self._asset_loader.allows(url, method, resource_type)
+
+    def _fulfill_asset(self, route: Any, url: str, method: str, resource_type: str) -> None:
+        result = self._asset_loader.fetch(url, method, resource_type)
+        route.fulfill(status=result.status, headers=result.headers, body=result.body)
+
     def _target_request_headers(self, request: Any, url: str) -> dict[str, str]:
         """Rebuild target headers and cookies for a gated Playwright fetch."""
         headers = {
@@ -271,6 +281,15 @@ class BrowserEngine:
         """
         from urllib.parse import urljoin
 
+        method = route.request.method
+        resource_type = getattr(route.request, "resource_type", "document")
+        if self._allowed_asset(route.request.url, method, resource_type) and not self._same_origin(route.request.url):
+            try:
+                self._fulfill_asset(route, route.request.url, method, resource_type)
+            except Exception:
+                logger.debug("isolated browser asset fetch failed", exc_info=True)
+                route.abort()
+            return
         if not self._same_origin(route.request.url):
             self._blocked_requests += 1
             self._note_blocked(route.request.url)
@@ -292,9 +311,7 @@ class BrowserEngine:
                     break
                 target = urljoin(current_url, location)
                 hops += 1
-                if hops > self._MAX_REDIRECT_HOPS or not self._same_origin(
-                    target,
-                ):
+                if hops > self._MAX_REDIRECT_HOPS or not self._same_origin(target):
                     self._blocked_requests += 1
                     # Record the blocked hop destination too: without
                     # it the blocked_hosts diff was blind to poisoned

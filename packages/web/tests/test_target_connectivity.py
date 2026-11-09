@@ -47,10 +47,15 @@ def test_target_header_reaches_both_real_clients(target_server, tmp_path):
 def test_target_host_admitted_before_client_construction(monkeypatch, tmp_path):
     from core.llm import egress
     from core.sandbox import proxy
+    from types import SimpleNamespace
 
     admitted = []
     monkeypatch.setattr(egress, "_enabled", True)
-    monkeypatch.setattr(proxy, "get_proxy", lambda hosts: admitted.extend(hosts))
+    def record_proxy(hosts):
+        admitted.extend(hosts)
+        return SimpleNamespace(port=3123)
+
+    monkeypatch.setattr(proxy, "get_proxy", record_proxy)
     scanner = WebScanner(
         "https://target.example/path", out_dir=tmp_path / "scan",
         required_hosts=["Login.Example.Net", "login.example.net"],
@@ -60,13 +65,20 @@ def test_target_host_admitted_before_client_construction(monkeypatch, tmp_path):
 
 
 def test_unicode_target_uses_transport_idna_form(monkeypatch):
+    from types import SimpleNamespace
+
     from core.llm import egress
     from core.sandbox import proxy
     from urllib3.util import parse_url
 
     admitted = []
     monkeypatch.setattr(egress, "_enabled", True)
-    monkeypatch.setattr(proxy, "get_proxy", lambda hosts: admitted.extend(hosts))
+
+    def record_proxy(hosts):
+        admitted.extend(hosts)
+        return SimpleNamespace(port=3123)
+
+    monkeypatch.setattr(proxy, "get_proxy", record_proxy)
     egress.register_web_target("https://faß.de/path")
     egress.register_web_target("https://[::1]/")
     egress.register_web_target("https://svc_name.internal/")
