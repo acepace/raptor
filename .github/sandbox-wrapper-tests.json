@@ -1107,9 +1107,12 @@
             "packages/web/tests/test_browser_live.py::TestOriginGateHardening::test_redirect_hop_cannot_leave_origin",
             "packages/web/tests/test_browser_live.py::TestOriginGateHardening::test_target_header_preserves_session_cookie_across_redirect",
             "packages/web/tests/test_browser_live.py::TestOriginGateHardening::test_binary_post_body_survives_same_origin_redirect",
-            "packages/web/tests/test_browser_live.py::TestOriginGateHardening::test_websocket_cannot_leave_origin"
+            "packages/web/tests/test_browser_live.py::TestOriginGateHardening::test_websocket_cannot_leave_origin",
+            "packages/web/tests/test_asset_loader_live.py::test_direct_assets_do_not_share_target_state",
+            "packages/web/tests/test_asset_loader_live.py::test_target_redirect_to_asset_host_is_blocked",
+            "packages/web/tests/test_asset_loader_live.py::test_asset_redirect_is_never_followed_into_target"
           ],
-          "expected": 14
+          "expected": 17
         },
         "darwin": {
           "tests": [
